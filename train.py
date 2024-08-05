@@ -22,7 +22,7 @@ import random
 from tqdm import tqdm
 import os
 
-# best loss so far: 0.0036
+
 def train():
 
     dataset = DatasetApartments(**dataset_args)

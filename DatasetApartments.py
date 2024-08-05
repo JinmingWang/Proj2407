@@ -103,7 +103,7 @@ class DatasetApartments(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = DatasetApartments(max_len=512, load_path="/home/jimmy/Data/Trajs_20240711/dataset.pth")
+    dataset = DatasetApartments(max_len=512, load_path="Submission/Proj2407/dataset.pth")
     dataset.resetEraseRate(0.5)
 
     traj, mask, loc_guess, meta = dataset[0]
