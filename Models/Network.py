@@ -1,5 +1,5 @@
 from Models.Basics import *
-from Models.Linkage import GRU_Conv
+from Models.StateProp import GRU_Conv
 from math import sqrt, ceil
 
 

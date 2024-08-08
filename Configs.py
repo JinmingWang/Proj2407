@@ -11,7 +11,7 @@ T = 500
 TRAJ_LEN = 512
 
 ### Training Control -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-init_lr = 5e-5
+init_lr = 1e-4
 lr_reduce_factor = 0.5
 lr_reduce_patience = 80
 batch_size = 50

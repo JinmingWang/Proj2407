@@ -4,7 +4,6 @@ from tqdm import tqdm
 from math import log
 
 Tensor = torch.Tensor
-Module = torch.nn.Module
 
 
 class DDPM:
@@ -50,7 +49,7 @@ class DDPM:
         # t: 0 - T-1
         return torch.sqrt(self.a[t]) * x_t + torch.sqrt(1 - self.a[t]) * eps_t_to_tp1
 
-    def diffusionBackwardStep(self, x_tp1: Tensor, t: int, epsilon_pred: Tensor):
+    def diffusionBackwardStep(self, x_tp1: torch.Tensor, t: int, epsilon_pred: torch.Tensor):
         """
         Backward Diffusion Process
         :param x_t: input images (B, C, L)
@@ -68,24 +67,24 @@ class DDPM:
         if t <= 5:
             return mu
         else:
-            stds = torch.sqrt((1 - self.abar[t - 1]) / (1 - self.abar[t]) * beta) * torch.randn_like(x_tp1) * 0.1
+            stds = torch.sqrt((1 - self.abar[t - 1]) / (1 - self.abar[t]) * beta) * torch.randn_like(x_tp1) * 0.2
             return mu + stds
 
     @torch.no_grad()
     def diffusionBackward(self,
-                          unet: Module,
-                          linkage: Module,
+                          unet: torch.nn.Module,
+                          linkage,
                           loc_T: Tensor,
                           s: Tensor,
-                          additional: Tensor,
                           time, loc_guess, mask, verbose=False):
         """
         Backward Diffusion Process
-        :param unet: UNet model
-        :param linkage: Linkage model
-        :param loc_T: input (B, 2, L), 2 for lng, lat
-        :param s: state
-        :param additional: additional embedding information, usually include time (B, 1, L), loc_guess (B, 2, L), mask (B, 1, L), may or may not include metadata embedding E (B, E, L), they are concatenated along the channel dimension
+        :param unet: UNet
+        :param input_T: input images (B, 6, L)
+        :param s: initial state (B, 32, L//4)
+        :param E: mix context (B, 32, L//4)
+        :param mask: mask (B, 1, L), 1 for erased, 0 for not erased, -1 for padding
+        :param query_len: query length (B, )
         """
         B = loc_T.shape[0]
         # construct update mask, selecting only the part of the input that needs to be updated

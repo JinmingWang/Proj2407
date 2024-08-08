@@ -76,7 +76,8 @@ class BatchManager():
         self.tau_list = list(range(self.T - 1, -1, -skip_step))
         if self.tau_list[-1] != 0:
             self.tau_list.append(0)
-        rprint(f"[red]With T={self.T}, Skip Step={skip_step}, Tau List={self.tau_list}[/red]")
+        rprint(
+            f"[red]With T={self.T}, Skip Step={skip_step}, Tau List={self.tau_list[:5]}...{self.tau_list[-5:]}[/red]")
         # Number of tau values
         self.Tau = len(self.tau_list)
 
@@ -86,14 +87,15 @@ class BatchManager():
         self.eps_0_to_tp1 = [torch.zeros(self.T, 2, self.L, device=self.device) for _ in range(self.B)]
         self.inputs = torch.zeros(self.B, self.T + 1, 6, self.L, dtype=torch.float32, device=self.device)
         self.masks = torch.zeros(self.B, 3, self.L, dtype=torch.bool, device=self.device)
+        self.metas = torch.zeros(self.B, 4, self.L, dtype=torch.long, device=self.device)
         self.s_tp1_to_T = list()
 
         # Print memory usage
-        float_count = self.tau.nelement() * 2 + self.eps_0_to_tp1[0].nelement() * self.B + self.inputs.nelement() + self.masks.nelement()
+        float_count = self.tau.nelement() * 2 + self.eps_0_to_tp1[
+            0].nelement() * self.B + self.inputs.nelement() + self.masks.nelement()
         float_count += sum([each.nelement() for each in self.s_tp1_to_T])
         MB_count = float_count * 4 / 1024 / 1024
         rprint(f"[red]Memory Usage For LDDM Scheduler After Initialization: {MB_count:.2f} MB[/red]")
-
 
     def registerState(self, shape: List[int]):
         """
@@ -104,18 +106,17 @@ class BatchManager():
         """
         self.s_tp1_to_T.append(torch.zeros(self.B, *shape, device=self.device))
 
-
     def loadDataToBatch(self, load_idx: int):
         """
         load data to the batch
         :param load_idx: The index of the batch to load data to
         :return:
         """
-        self.dataset.resetSampleLength(random.choice(list(range(64, 512))))
+        self.dataset.resetSampleLength(random.choice(list(range(64, 513))))
         self.dataset.resetEraseRate(random.uniform(0.2, 0.9))
 
         # Get the data
-        traj_0, erase_mask, lnglat_guess = self.dataset[self.dataset_idx_mapping[self.data_idx]]
+        traj_0, erase_mask, lnglat_guess, meta = self.dataset[self.dataset_idx_mapping[self.data_idx]]
         erase_mask = erase_mask.reshape(1, 1, -1)
         lnglat_guess = lnglat_guess.unsqueeze(0)
 
@@ -131,10 +132,11 @@ class BatchManager():
         # mask: (1, 3, L)
         # comb_noises: (T, 1, 2, l)
 
-        trajs = trajs[:, 0, ...]     # (T+1, 3, L)
-        self.inputs[load_idx] = torch.cat([trajs, lnglat_guess.repeat(self.T+1, 1, 1), erase_mask.repeat(self.T+1, 1, 1)], dim=1)   # (T+1, 6, L)
+        trajs = trajs[:, 0, ...]  # (T+1, 3, L)
+        self.inputs[load_idx] = torch.cat(
+            [trajs, lnglat_guess.repeat(self.T + 1, 1, 1), erase_mask.repeat(self.T + 1, 1, 1)], dim=1)  # (T+1, 6, L)
         self.masks[load_idx] = mask[0]
-
+        self.metas[load_idx] = meta
         self.eps_0_to_tp1[load_idx] = comb_noises[:, 0, ...]
 
         # Update tau and tau_next
@@ -158,24 +160,20 @@ class BatchManager():
         for min_tau_next_id in min_tau_next_ids:
             self.loadDataToBatch(min_tau_next_id)
 
-
     def __len__(self):
         return self.total_iterations
-
 
     def __iter__(self):
         # first batch_size iterations, we only load data
         for b in range(self.B):
-            for i in range(self.T // self.B):
-                # So the t between sample b and b+1 in the batch will have difference of self.skip_step * self.batch_id_interval
-                self.tau = func.relu(self.tau - self.skip_step)
-                self.tau_next -= self.skip_step
             self.loadDataToBatch(b)
-
-        print("tau:", self.tau)
-        print("tau_next:", self.tau_next)
+            self.tau[b] = max(b * self.skip_step % self.T - 1, 0)
+            self.tau_next[b] = ((b + 1) * self.skip_step - 1) % self.T
         rprint(f"[green]Batch Fill Complete, Training Starts[/green]")
-        # Now we have a full batch
+        print("t = ")
+        print(self.tau)
+        print("t_next = ")
+        print(self.tau_next)
 
         # Main loop
         for _ in range(self.total_iterations):
@@ -188,12 +186,12 @@ class BatchManager():
                    [self.eps_0_to_tp1[i][self.tau[i]] for i in range(self.B)],
                    [self.eps_0_to_tp1[i][self.tau_next[i]] for i in range(self.B)],
                    self.masks,
+                   self.metas,
                    self.s_tp1_to_T)
 
             # The method will be paused here, and resumed when the for loop is called again
             # At the beginning of the loop, we update the batch
             self.updateBatch()
-
 
     def updateState(self, s_t_to_T: List[torch.Tensor]):
         """
@@ -203,7 +201,6 @@ class BatchManager():
         """
         for i in range(len(s_t_to_T)):
             self.s_tp1_to_T[i] = s_t_to_T[i].detach()
-
 
     def summarizeThisBatch(self):
         console = Console()
@@ -229,7 +226,7 @@ class BatchManager():
 
         console.print(table)
 
-    @torch.compile
+    # @torch.compile
     def addNoise(self, traj_0: torch.Tensor, erase_mask: torch.Tensor):
         """
         :param traj_0: (B, 3, L) lng, lat, time
@@ -297,7 +294,8 @@ class ThreadedScheduler():
                 [item.clone() for item in data[5]],
                 [item.clone() for item in data[6]],
                 data[7].clone(),
-                [item.clone() for item in data[8]],
+                data[8].clone(),
+                [item.clone() for item in data[9]],
             ])
 
     def __len__(self):

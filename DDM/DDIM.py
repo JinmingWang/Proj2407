@@ -70,7 +70,7 @@ class DDIM:
         :return: x_t-1: output images (B, C, L)
         """
         pred_x0 = (x_tp1 - self.sqrt_1_m_αbar[t] * ϵ_pred) / self.sqrt_αbar[t]
-        if t <= 10:
+        if t <= self.skip_step:
             return pred_x0
         return self.diffusionForward(pred_x0, next_t, ϵ_pred)
 
@@ -100,7 +100,7 @@ class DDIM:
         t_list = list(range(self.T - 1, -1, -self.skip_step))
         if t_list[-1] != 0:
             t_list.append(0)
-        pbar = tqdm(t_list) if verbose else t_list
+        pbar = tqdm(t_list, desc="Recovery") if verbose else t_list
         for ti, t in enumerate(pbar):
             output, hidden = unet(torch.cat([loc_t, additional], dim=1), tensor_t[:, t], s)  # output: (B, 2, L)
             s = linkage(hidden, s, tensor_t[:, t])
@@ -144,6 +144,45 @@ class DDIM:
             loc_t[mask_2d] = temp[mask_2d]
 
         return loc_t
+
+    @torch.no_grad()
+    def diffusionBackwardWithE(self,
+                          unet: torch.nn.Module,
+                          linkage,
+                          E,
+                          loc_T: Tensor,
+                          s: Tensor,
+                          time, loc_guess, mask,
+                          verbose=False):
+        """
+        Backward Diffusion Process
+        :param unet: UNet
+        :param input_T: input images (B, 6, L)
+        :param s: initial state (B, 32, L//4)
+        :param E: mix context (B, 32, L//4)
+        :param mask: mask (B, 1, L), 1 for erased, 0 for not erased, -1 for padding
+        :param query_len: query length (B, )
+        """
+        B = loc_T.shape[0]
+        # construct update mask, selecting only the part of the input that needs to be updated
+        mask_2d = (mask > 0.1).repeat(1, 2, 1)
+        additional = torch.cat([time, loc_guess, mask, E], dim=1)
+        loc_t = loc_T.clone()
+        tensor_t = torch.arange(self.T, dtype=torch.long, device=loc_t.device).repeat(B, 1)  # (B, T)
+        t_list = list(range(self.T - 1, -1, -self.skip_step))
+        if t_list[-1] != 0:
+            t_list.append(0)
+        pbar = tqdm(t_list) if verbose else t_list
+        for ti, t in enumerate(pbar):
+            output, hidden = unet(torch.cat([loc_t, additional], dim=1), tensor_t[:, t], s)  # output: (B, 2, L)
+            s = linkage(hidden, s, tensor_t[:, t])
+            t_next = 0 if ti + 1 == len(t_list) else t_list[ti + 1]
+
+            temp = self.diffusionBackwardStep(loc_t, t, t_next, output)
+            loc_t[mask_2d] = temp[mask_2d]
+
+        return loc_t
+
 
     def combineNoise(self, eps_0_to_t, eps_t_to_tp1, t):
         """
