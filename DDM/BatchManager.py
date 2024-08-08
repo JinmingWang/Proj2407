@@ -20,9 +20,6 @@ import torch.nn.functional as func
 from typing import *
 import numpy as np
 from rich import print as rprint
-from rich.table import Table
-from rich.console import Console
-from tqdm import tqdm
 import random
 import threading
 import queue
@@ -90,12 +87,6 @@ class BatchManager():
         self.metas = torch.zeros(self.B, 4, self.L, dtype=torch.long, device=self.device)
         self.s_tp1_to_T = list()
 
-        # Print memory usage
-        float_count = self.tau.nelement() * 2 + self.eps_0_to_tp1[
-            0].nelement() * self.B + self.inputs.nelement() + self.masks.nelement()
-        float_count += sum([each.nelement() for each in self.s_tp1_to_T])
-        MB_count = float_count * 4 / 1024 / 1024
-        rprint(f"[red]Memory Usage For LDDM Scheduler After Initialization: {MB_count:.2f} MB[/red]")
 
     def registerState(self, shape: List[int]):
         """
@@ -202,31 +193,8 @@ class BatchManager():
         for i in range(len(s_t_to_T)):
             self.s_tp1_to_T[i] = s_t_to_T[i].detach()
 
-    def summarizeThisBatch(self):
-        console = Console()
-        table = Table(show_header=True, header_style="bold magenta")
-        table.add_column("Batch Index", style="dim", width=12)
-        table.add_column("t", style="dim", width=12)
-        table.add_column("t+1", style="dim", width=12)
-        table.add_column("x_t", style="dim", width=12)
-        table.add_column("x_t+1", style="dim", width=12)
-        table.add_column("eps_0_to_t", style="dim", width=12)
-        table.add_column("eps_0_to_t+1", style="dim", width=12)
 
-        for i in range(self.B):
-            table.add_row(
-                str(i),
-                str(self.tau[i].item()),
-                str(self.tau_next[i].item()),
-                f"x_{self.tau[i] + 1}",
-                f"x_{self.tau_next[i] + 1}",
-                f"eps_0_to_{self.tau[i] + 1}",
-                f"eps_0_to_{self.tau_next[i] + 1}"
-            )
-
-        console.print(table)
-
-    # @torch.compile
+    @torch.compile
     def addNoise(self, traj_0: torch.Tensor, erase_mask: torch.Tensor):
         """
         :param traj_0: (B, 3, L) lng, lat, time

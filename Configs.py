@@ -13,9 +13,9 @@ TRAJ_LEN = 512
 ### Training Control -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 init_lr = 1e-4
 lr_reduce_factor = 0.5
-lr_reduce_patience = 80
+lr_reduce_patience = 50
 batch_size = 50
-epochs = 3000
+epochs = 1000
 log_interval = 10
 mov_avg_interval = 15 * T
 
