@@ -7,8 +7,15 @@ Tensor = torch.Tensor
 
 class DatasetApartments(Dataset):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    def __init__(self, max_len: int, load_path: str):
+    def __init__(self, max_len: int, load_path: str, centering: bool = False):
+        """
+        The dataset collected in apartment areas in last-mile delivery
+        :param max_len: The maximum length of the trajectory
+        :param load_path: The path to load the dataset
+        :param centering: Whether to center the trajectory upon preprocessing, default False
+        """
         temp = torch.load(load_path)
+        self.centering = centering
 
         # each traj: (3, L). Normalized (lng, lat, sec_of_day)
         self.trajs: List[Tensor] = [each.to(torch.float32).to(self.device) for each in temp["trajs"]]
@@ -28,7 +35,7 @@ class DatasetApartments(Dataset):
         self.erase_rate = min(1.0, max(0.0, elim_rate))
 
     @staticmethod
-    # @torch.compile
+    @torch.compile
     def guessTraj(traj_0, erase_mask):
         """
         Obtain the guessed trajectory from the original trajectory and the erase mask
@@ -68,11 +75,39 @@ class DatasetApartments(Dataset):
         return loc_guess
 
 
+    @staticmethod
+    def centerTraj(traj: Tensor) -> Tuple[Tensor, Tensor]:
+        """
+        Center the trajectory to the origin
+        :param traj: The trajectory to center, (B, 3, L) or (3, L)
+        :return: The centered trajectory and the center, (B, 3, L), (B, 2, 1) or (3, L), (2, 1)
+        """
+        if len(traj.shape) == 3:
+            center = traj[:, :2].mean(dim=2, keepdim=True)
+        else:
+            center = traj[:2].mean(dim=1, keepdim=True)
+        return traj - center, center
+
+    @staticmethod
+    def decenterTraj(traj: Tensor, center: Tensor) -> Tensor:
+        """
+        Decenter the trajectory
+        :param traj: The trajectory to decenter, (3, L) or (B, 3, L)
+        :param center: The center, (2, 1) or (B, 2, 1)
+        :return: The decentered trajectory, (3, L) or (B, 3, L)
+        """
+        return traj + center
+
+
     def __len__(self):
         return len(self.trajs)
 
     def __getitem__(self, index):
         traj = self.trajs[index]
+        if self.centering:
+            traj, loc_mean = self.centerTraj(traj)
+        else:
+            loc_mean = torch.zeros(2, 1, device=self.device)
         sample_start = random.randint(0, max(0, traj.shape[1] - self.sample_length))
         traj = traj[:, sample_start:sample_start + self.sample_length]
         meta = self.metadata[index][:, sample_start:sample_start + self.sample_length]
@@ -99,12 +134,12 @@ class DatasetApartments(Dataset):
         loc_guess = torch.nn.functional.pad(loc_guess, (0, pad_size))
         meta = torch.nn.functional.pad(meta + 1, (0, pad_size), mode="constant", value=0)
 
-        return traj, mask, loc_guess, meta
+        return traj, mask, loc_guess, loc_mean, meta
 
 
 if __name__ == "__main__":
     dataset = DatasetApartments(max_len=512, load_path="Submission/Proj2407/dataset.pth")
     dataset.resetEraseRate(0.5)
 
-    traj, mask, loc_guess, meta = dataset[0]
-    print(traj.shape, mask.shape, loc_guess.shape, meta.shape)
+    traj, mask, loc_guess, loc_mean, meta = dataset[0]
+    print(traj.shape, mask.shape, loc_guess.shape, loc_mean.shape, meta.shape)

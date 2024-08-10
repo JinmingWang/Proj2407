@@ -89,10 +89,10 @@ def train():
             optimizer.zero_grad()
 
             # Get data
-            t, tp1, x_t, x_tp1, x_T, eps_0_to_t, eps_0_to_tp1, masks, meta, s_tp1 = batch_data
+            t, tp1, x_t, x_tp1, x_T, eps_0_to_t, eps_0_to_tp1, masks, loc_mean, meta, s_tp1 = batch_data
 
             # Train Embedder
-            embed = embedder(meta)
+            embed = embedder(meta, loc_mean)
             # The first denoising step
             output_tp1, hidden = unet(torch.cat([x_tp1, embed], dim=1), tp1, s_tp1)
             # Linkage in between
@@ -115,7 +115,7 @@ def train():
             # At the beginning, all states are initialize to 0 regardless of the actual diffusion step
             # However, state should only be 0 at t=T-1
             # So we don't back-propagate the loss until the states values are updated
-            if global_it > actual_diff_step:
+            if global_it > max(actual_diff_step, batch_size):
                 loss.backward()
                 optimizer.step()
 

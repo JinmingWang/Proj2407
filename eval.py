@@ -30,14 +30,14 @@ def recovery(ddm, unet, linkage, embedder, verbose=False):
     linkage = linkage.eval()
     embedder = embedder.eval()
 
-    batch_data = torch.load(f"UseCase/test_20240711_B100_l512_E05.pth")
+    batch_data = torch.load("./test_20240711_B100_l512_E05.pth")
 
-    loc_0, loc_T, loc_guess, meta, time, mask, bool_mask, query_len, observe_len = batch_data
+    loc_0, loc_T, loc_guess, loc_mean, meta, time, mask, bool_mask, query_len, observe_len = batch_data
 
     B = loc_0.shape[0]
 
     with torch.no_grad():
-        E = embedder(meta)
+        E = embedder(meta, loc_mean)
 
     s_T = []
     for shape in unet.getStateShapes(TRAJ_LEN):
@@ -52,8 +52,8 @@ def recovery(ddm, unet, linkage, embedder, verbose=False):
 
     fig = plt.figure()
     plt.title("Original vs Recovery")
-    plotBatchLoc(loc_0, True, "blue")
-    plotBatchLoc(loc_rec, True, "red")
+    plotBatchLoc(loc_0 + loc_mean, True, "blue")
+    plotBatchLoc(loc_rec + loc_mean, True, "red")
 
     unet.train()
     linkage.train()

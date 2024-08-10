@@ -84,6 +84,7 @@ class BatchManager():
         self.eps_0_to_tp1 = [torch.zeros(self.T, 2, self.L, device=self.device) for _ in range(self.B)]
         self.inputs = torch.zeros(self.B, self.T + 1, 6, self.L, dtype=torch.float32, device=self.device)
         self.masks = torch.zeros(self.B, 3, self.L, dtype=torch.bool, device=self.device)
+        self.loc_means = torch.zeros(self.B, 2, 1, dtype=torch.float32, device=self.device)
         self.metas = torch.zeros(self.B, 4, self.L, dtype=torch.long, device=self.device)
         self.s_tp1_to_T = list()
 
@@ -107,7 +108,7 @@ class BatchManager():
         self.dataset.resetEraseRate(random.uniform(0.2, 0.9))
 
         # Get the data
-        traj_0, erase_mask, lnglat_guess, meta = self.dataset[self.dataset_idx_mapping[self.data_idx]]
+        traj_0, erase_mask, lnglat_guess, loc_mean, meta = self.dataset[self.dataset_idx_mapping[self.data_idx]]
         erase_mask = erase_mask.reshape(1, 1, -1)
         lnglat_guess = lnglat_guess.unsqueeze(0)
 
@@ -127,6 +128,7 @@ class BatchManager():
         self.inputs[load_idx] = torch.cat(
             [trajs, lnglat_guess.repeat(self.T + 1, 1, 1), erase_mask.repeat(self.T + 1, 1, 1)], dim=1)  # (T+1, 6, L)
         self.masks[load_idx] = mask[0]
+        self.loc_means[load_idx] = loc_mean
         self.metas[load_idx] = meta
         self.eps_0_to_tp1[load_idx] = comb_noises[:, 0, ...]
 
@@ -177,6 +179,7 @@ class BatchManager():
                    [self.eps_0_to_tp1[i][self.tau[i]] for i in range(self.B)],
                    [self.eps_0_to_tp1[i][self.tau_next[i]] for i in range(self.B)],
                    self.masks,
+                   self.loc_means,
                    self.metas,
                    self.s_tp1_to_T)
 
@@ -263,7 +266,8 @@ class ThreadedScheduler():
                 [item.clone() for item in data[6]],
                 data[7].clone(),
                 data[8].clone(),
-                [item.clone() for item in data[9]],
+                data[9].clone(),
+                [item.clone() for item in data[10]],
             ])
 
     def __len__(self):
