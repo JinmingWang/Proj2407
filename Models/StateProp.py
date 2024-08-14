@@ -43,17 +43,3 @@ class GRU_Conv(nn.Module):
         h = (1 - z) * prev_h + z * h_tilde
 
         return h
-
-
-class Linkage(nn.Module):
-    def __init__(self, in_shapes: List[Tuple[int, int]], max_t: int):
-        super().__init__()
-        self.gru_cells = nn.ModuleList()
-        for shape in in_shapes:
-            c = shape[0]
-            self.gru_cells.append(GRU_Conv(c, c, max_t))
-
-    def forward(self, hidden, s_tp1, t):
-        for i in range(len(self.gru_cells)):
-            hidden[i] = self.gru_cells[i](hidden[i], s_tp1[i], t)
-        return hidden

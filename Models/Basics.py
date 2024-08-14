@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as func
 from typing import *
-from tqdm import tqdm
-import time
 import math
 from einops import rearrange
 

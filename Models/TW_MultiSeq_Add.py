@@ -246,6 +246,20 @@ class TrajWeaverUNet(nn.Module):
         return self.getStateShapes(traj_len)
 
 
+class Linkage(nn.Module):
+    def __init__(self, in_shapes: List[Tuple[int, int]], max_t: int):
+        super().__init__()
+        self.gru_cells = nn.ModuleList()
+        for shape in in_shapes:
+            c = shape[0]
+            self.gru_cells.append(GRU_Conv(c, c, max_t))
+
+    def forward(self, hidden, s_tp1, t):
+        for i in range(len(self.gru_cells)):
+            hidden[i] = self.gru_cells[i](hidden[i], s_tp1[i], t)
+        return hidden
+
+
 if __name__ == "__main__":
     model = TrajWeaverUNet(
         in_c=6,  # input trajectory encoding channels

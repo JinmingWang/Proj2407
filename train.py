@@ -1,7 +1,6 @@
 # TrajWeaver
-from DDM import DDPM, DDIM
-from BatchManagers import BatchManagerApartments as BatchManager
-from Models import TrajWeaverUNet, Linkage, Embedder
+from DDM import DDIM
+from BatchManagers import ThreadedScheduler
 
 # Utils and Configs
 from Utils import MovingAverage, loadModel, saveModel, MaskedMSE
@@ -9,7 +8,7 @@ from Configs import *
 
 # Eval & Dataset
 from eval import recovery
-from Submission.Proj2407.Dataset.DatasetApartments import DatasetApartments
+
 
 # torch imports
 import torch
@@ -27,18 +26,18 @@ import os
 def train():
 
     dataset = DatasetApartments(**dataset_args)
-    unet = TrajWeaverUNet(**model_args).cuda()
-    linkage = Linkage(unet.getStateShapes(TRAJ_LEN), T).cuda()
-    embedder = Embedder(6).cuda()
+    unet = TrajWeaver(**TW_args).cuda()
+    linkage = Linkage(unet.getStateShapes(TRAJ_LEN), **link_args).cuda()
+    embedder = Embedder(embed_dim).cuda()
 
-    loadModel("Runs/2024-07-15_05-26-26/last.pth", unet=unet, linkage=linkage, embedder=embedder)
+    # loadModel("Runs/2024-07-15_05-26-26/last.pth", unet=unet, linkage=linkage, embedder=embedder)
 
     unet.train()
     linkage.train()
     embedder.train()
 
     # --- Prepare ---
-    diff_manager = (DDIM if use_ddim else DDPM)(**diffusion_args)
+    diff_manager = DDIM(**diffusion_args)
 
     loss_func = MaskedMSE()
 
@@ -61,7 +60,7 @@ def train():
 
     batch_manager = BatchManager(
         ddm=diff_manager,
-        skip_step=ddim_skip_step,
+        skip_step=diffusion_args["skip_step"],
         device="cuda",
         num_epochs=epochs,
         batch_size=batch_size,
