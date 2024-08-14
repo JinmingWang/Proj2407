@@ -30,7 +30,7 @@ def recovery(ddm, unet, linkage, embedder, verbose=False):
     linkage = linkage.eval()
     embedder = embedder.eval()
 
-    batch_data = torch.load("./test_20240711_B100_l512_E05.pth")
+    batch_data = torch.load("Dataset/test_20240711_B100_l512_E05.pth")
 
     loc_0, loc_T, loc_guess, loc_mean, meta, time, mask, bool_mask, query_len, observe_len = batch_data
 

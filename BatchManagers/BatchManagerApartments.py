@@ -1,28 +1,9 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as func
-from typing import *
-import numpy as np
-from rich import print as rprint
-from rich.table import Table
-from rich.console import Console
-from tqdm import tqdm
-import random
-import threading
-import queue
-
-from Configs import *
-
-
-import torch
-import torch.nn as nn
 import torch.nn.functional as func
 from typing import *
 import numpy as np
 from rich import print as rprint
 import random
-import threading
-import queue
+
 
 from Configs import *
 
@@ -36,9 +17,10 @@ class BatchManager():
                  batch_size: int,
                  traj_len: int,
                  dataset: torch.utils.data.Dataset,
+                 mode: Literal["Shared t", "Consecutive", "Uniform"] = "Uniform"
                  ):
         """
-        Initialize the LDDM Scheduler
+        Initialize the Batch Manager
 
         :param ddm: The DDPM or DDIM manager
         :param skip_step: How many steps to skip if using DDIM
@@ -54,6 +36,7 @@ class BatchManager():
         self.T = ddm.T
         self.L = traj_len
         self.dataset = dataset
+        self.mode = mode
 
         # Compute total iterations
         # subtract 2 because:
@@ -160,8 +143,12 @@ class BatchManager():
         # first batch_size iterations, we only load data
         for b in range(self.B):
             self.loadDataToBatch(b)
-            self.tau[b] = max(b * self.skip_step % self.T - 1, 0)
-            self.tau_next[b] = ((b + 1) * self.skip_step - 1) % self.T
+            if self.mode == "Uniform":
+                self.tau[b] = max(b * self.skip_step % self.T - 1, 0)
+                self.tau_next[b] = ((b + 1) * self.skip_step - 1) % self.T
+            elif self.mode == "Consecutive":
+                self.tau = func.relu(self.tau - self.skip_step)
+                self.tau_next -= self.skip_step
         rprint(f"[green]Batch Fill Complete, Training Starts[/green]")
         print("t = ")
         print(self.tau)
@@ -197,7 +184,7 @@ class BatchManager():
             self.s_tp1_to_T[i] = s_t_to_T[i].detach()
 
 
-    @torch.compile
+    # @torch.compile
     def addNoise(self, traj_0: torch.Tensor, erase_mask: torch.Tensor):
         """
         :param traj_0: (B, 3, L) lng, lat, time
@@ -239,48 +226,3 @@ class BatchManager():
         return trajs, mask, comb_noises
 
 
-class ThreadedScheduler():
-    """
-    Usage:
-
-    with ThreadedScheduler(scheduler) as data_iterator:
-        for data in data_iterator:
-            # do something with data
-
-    """
-
-    def __init__(self, scheduler: BatchManager, queue_size: int = 4):
-        self.data_queue = queue.Queue(maxsize=queue_size)
-        self.scheduler_thread = threading.Thread(target=self.loadData)
-        self.scheduler = scheduler
-
-    def loadData(self):
-        for data in self.scheduler:
-            self.data_queue.put([
-                data[0].clone(),
-                data[1].clone(),
-                data[2].clone(),
-                data[3].clone(),
-                data[4].clone(),
-                [item.clone() for item in data[5]],
-                [item.clone() for item in data[6]],
-                data[7].clone(),
-                data[8].clone(),
-                data[9].clone(),
-                [item.clone() for item in data[10]],
-            ])
-
-    def __len__(self):
-        return len(self.scheduler)
-
-    def __enter__(self):
-        self.scheduler_thread.start()
-        return self
-
-    def __iter__(self):
-        for _ in range(len(self.scheduler)):
-            yield self.data_queue.get()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        # error handle
-        self.scheduler_thread.join()

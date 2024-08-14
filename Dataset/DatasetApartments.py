@@ -35,7 +35,7 @@ class DatasetApartments(Dataset):
         self.erase_rate = min(1.0, max(0.0, elim_rate))
 
     @staticmethod
-    @torch.compile
+    # @torch.compile
     def guessTraj(traj_0, erase_mask):
         """
         Obtain the guessed trajectory from the original trajectory and the erase mask

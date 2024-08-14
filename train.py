@@ -1,5 +1,6 @@
 # TrajWeaver
-from DDM import DDPM, DDIM, BatchManager, ThreadedScheduler
+from DDM import DDPM, DDIM
+from BatchManagers import BatchManagerApartments as BatchManager
 from Models import TrajWeaverUNet, Linkage, Embedder
 
 # Utils and Configs
@@ -8,7 +9,7 @@ from Configs import *
 
 # Eval & Dataset
 from eval import recovery
-from DatasetApartments import DatasetApartments
+from Submission.Proj2407.Dataset.DatasetApartments import DatasetApartments
 
 # torch imports
 import torch
