@@ -58,7 +58,7 @@ if dataset_name == "apartments":
     from BatchManagers import ApartmentsBatchManager as BatchManager
     dataset_args = {
         "max_len": TRAJ_LEN,
-        "load_path": "./Dataset/dataset.pth",
+        "load_path": "./Dataset/apartment_dataset.pth",
     }
 else:
     from BatchManagers import TaxiBatchManager as BatchManager
