@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import List, Tuple, Dict, Any
 import os
 from Models import *
+from Dataset.DatasetApartments import DatasetApartments as ApartmentsDataset
+from Dataset.DatasetTaxi import TaxiDataset
 
 Tensor = torch.Tensor
 Module = torch.nn.Module
@@ -53,14 +55,12 @@ log_dir = f"./Runs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}/"
 save_dir = log_dir
 
 if dataset_name == "apartments":
-    from Dataset.DatasetApartments import DatasetApartments
     from BatchManagers import ApartmentsBatchManager as BatchManager
     dataset_args = {
         "max_len": TRAJ_LEN,
         "load_path": "./Dataset/dataset.pth",
     }
 else:
-    from Dataset.DatasetTaxi import DatasetTaxi
     from BatchManagers import TaxiBatchManager as BatchManager
     dataset_args = {
         "max_len": TRAJ_LEN,
@@ -73,7 +73,7 @@ if model_name == "TW_MultiSeq_Add":
     from Models import TW_MultiSeq_Add as TrajWeaver
     from Models import TW_MultiSeq_Add_Linkage as Linkage
     TW_args = {
-        "in_c": 12,  # input trajectory encoding channels
+        "in_c": 6 + embed_dim,  # input trajectory encoding channels
         "out_c": 2,
         "diffusion_steps": T,  # maximum diffusion steps
         "c_list": [128, 128, 128, 256],  # channel schedule of stages, first element is stem output channels
@@ -86,3 +86,75 @@ if model_name == "TW_MultiSeq_Add":
     link_args = {
         "max_t": T
     }
+elif model_name == "TW_MultiSeq_Cat":
+    from Models import TW_MultiSeq_Cat as TrajWeaver
+    from Models import TW_MultiSeq_Cat_Linkage as Linkage
+    TW_args = {
+        "in_c": 6 + embed_dim,  # input trajectory encoding channels
+        "out_c": 2,
+        "state_c": 32,
+        "diffusion_steps": T,  # maximum diffusion steps
+        "c_list": [128, 128, 128, 256],  # channel schedule of stages, first element is stem output channels
+        "blocks": ["RRRR", "RRRR", "RRRR"],  # number of resblocks in each stage
+        "embed_c": 64,  # channels of mix embeddings
+        "expend": 4,  # number of heads for attention
+        "dropout": 0.0,  # dropout
+    }
+
+    link_args = {
+        "state_c": 32,
+        "max_t": T
+    }
+elif model_name == "TW_MultiSeq_CA":
+    from Models import TW_MultiSeq_CA as TrajWeaver
+    from Models import TW_MultiSeq_CA_Linkage as Linkage
+    TW_args = {
+        "in_c": 6 + embed_dim,  # input trajectory encoding channels
+        "out_c": 2,
+        "diffusion_steps": T,  # maximum diffusion steps
+        "c_list": [128, 128, 128, 256],  # channel schedule of stages, first element is stem output channels
+        "blocks": ["RRRR", "RRRR", "RRRR"],  # number of resblocks in each stage
+        "embed_c": 64,  # channels of mix embeddings
+        "expend": 4,  # number of heads for attention
+        "dropout": 0.0,  # dropout
+    }
+
+    link_args = {
+        "max_t": T
+    }
+elif model_name == "TW_MultiVec_Add":
+    from Models import TW_MultiVec_Add as TrajWeaver
+    from Models import TW_MultiVec_Add_Linkage as Linkage
+    TW_args = {
+        "in_c": 6 + embed_dim,  # input trajectory encoding channels
+        "out_c": 2,
+        "diffusion_steps": T,  # maximum diffusion steps
+        "c_list": [128, 128, 128, 256],  # channel schedule of stages, first element is stem output channels
+        "blocks": ["RRRR", "RRRR", "RRRR"],  # number of resblocks in each stage
+        "embed_c": 64,  # channels of mix embeddings
+        "expend": 4,  # number of heads for attention
+        "dropout": 0.0,  # dropout
+    }
+
+    link_args = {
+        "max_t": T
+    }
+elif model_name == "TW_SingleSeq":
+    from Models import TW_Seq_Cat as TrajWeaver
+    from Models import TW_Seq_Cat_Linkage as Linkage
+    TW_args = {
+        "in_c": 6 + embed_dim,  # input trajectory encoding channels
+        "out_c": 2,
+        "diffusion_steps": T,  # maximum diffusion steps
+        "c_list": [128, 128, 128, 256],  # channel schedule of stages, first element is stem output channels
+        "blocks": ["RRRR", "RRRR", "RRRR"],  # number of resblocks in each stage
+        "embed_c": 64,  # channels of mix embeddings
+        "expend": 4,  # number of heads for attention
+        "dropout": 0.0,  # dropout
+    }
+
+    link_args = {
+        "max_t": T
+    }
+else:
+    raise ValueError(f"Unknown model name: {model_name}")

@@ -24,31 +24,34 @@ import os
 
 
 def train():
+    # --- Load data ---
+    if dataset_name == "apartments":
+        dataset = ApartmentsDataset(**dataset_args)
+    else:
+        dataset = TaxiDataset(**dataset_args)
 
-    dataset = DatasetApartments(**dataset_args)
-    unet = TrajWeaver(**TW_args).cuda()
-    linkage = Linkage(unet.getStateShapes(TRAJ_LEN), **link_args).cuda()
-    embedder = Embedder(embed_dim).cuda()
-
+    # --- Model and Diffusion Configs ---
+    unet = TrajWeaver(**TW_args).cuda().train()
+    linkage = Linkage(unet.getStateShapes(TRAJ_LEN), **link_args).cuda().train()
+    embedder = Embedder(embed_dim).cuda().train() if dataset_name == "apartments" else None
     # loadModel("Runs/2024-07-15_05-26-26/last.pth", unet=unet, linkage=linkage, embedder=embedder)
-
-    unet.train()
-    linkage.train()
-    embedder.train()
-
-    # --- Prepare ---
     diff_manager = DDIM(**diffusion_args)
 
+    # --- Loss function and optimizer ---
     loss_func = MaskedMSE()
 
     # Embedder should have a smaller learning rate
     # because it is trained on every sample for many times with the same input
-    optimizer = optim.AdamW([
-        {"params": unet.parameters()},
-        {"params": linkage.parameters()},
-        {"params": embedder.parameters(), "lr": init_lr * 0.01}
-    ], lr=init_lr)
+    params = [
+        {"params": unet.parameters()}, # Default learning rate
+        {"params": linkage.parameters()},  # Default learning rate
+    ]
+    if dataset_name == "apartments":
+        params.append({"params": embedder.parameters(), "lr": init_lr * 0.01})  # Smaller learning rate
 
+    optimizer = optim.AdamW(params, lr=init_lr)
+
+    # --- Recording and Loading ---
     mov_avg_loss = MovingAverage(mov_avg_interval)
     os.makedirs(save_dir)
     writer = SummaryWriter(log_dir)
@@ -81,6 +84,8 @@ def train():
                                      min_lr=1e-6,
                                      verbose=True)
 
+    # --- Training Loop ---
+
     # The proposed training algorithm with 2 denoising steps trained in one iteration
     best_recovery_loss = 1000
     with ThreadedScheduler(batch_manager, 3) as data_iterator:
@@ -88,17 +93,17 @@ def train():
         for global_it, batch_data in enumerate(pbar):
             optimizer.zero_grad()
 
-            # Get data
-            t, tp1, x_t, x_tp1, x_T, eps_0_to_t, eps_0_to_tp1, masks, loc_mean, meta, s_tp1 = batch_data
-
-            # Train Embedder
-            embed = embedder(meta, loc_mean)
-            # The first denoising step
-            output_tp1, hidden = unet(torch.cat([x_tp1, embed], dim=1), tp1, s_tp1)
-            # Linkage in between
-            s_t = linkage(hidden, s_tp1, tp1)
-            # The second denoising step
-            output_t, _ = unet(torch.cat([x_t, embed], dim=1), t, s_t)
+            if dataset_name == "apartments":
+                t, tp1, x_t, x_tp1, x_T, eps_0_to_t, eps_0_to_tp1, masks, loc_mean, meta, s_tp1 = batch_data
+                embed = embedder(meta, loc_mean)
+                output_tp1, hidden = unet(torch.cat([x_tp1, embed], dim=1), tp1, s_tp1)
+                s_t = linkage(hidden, s_tp1, tp1)
+                output_t, _ = unet(torch.cat([x_t, embed], dim=1), t, s_t)
+            else:
+                t, tp1, x_t, x_tp1, x_T, eps_0_to_t, eps_0_to_tp1, masks, s_tp1 = batch_data
+                output_tp1, hidden = unet(x_tp1, tp1, s_tp1)
+                s_t = linkage(hidden, s_tp1, tp1)
+                output_t, _ = unet(x_t, t, s_t)
 
             # Loss for the first denoising step & embedding
             loss_tp1 = loss_func(output_tp1, eps_0_to_tp1, masks)
